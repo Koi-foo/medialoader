@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# The script is distributed under the GNU v3.0 license
+# https://www.gnu.org/licenses/gpl-3.0.html
+# Gratitude can be expressed to the YooMoney wallet: 4100117347926251
+#
+# Python
+import os
+import re
+import time
+import argparse
+from sys import exit
+from os.path import exists
+from subprocess import run, PIPE, CalledProcessError
+
+"""Command line menu"""
+parser = argparse.ArgumentParser(allow_abbrev=True,
+description='''Download video by URL. Requires: ffmpeg, wget, 
+    standard python3 modules. Press CTRL+SHIFT+I in the browser, on the 
+    "network" tab, copy the link containing the "ts" file segment. After 
+    starting the video, determine which part of the URL is changing, enclose 
+    it in brackets {}, for example: "http://load9.ts" Pass the URL to 
+    the script --url "http//load{9}.ts""''')
+parser.add_argument('-v', '-version', action='version', version='''%(prog)s 0.3 
+    Project page https://github.com/Koi-foo/medialoader''')
+parser.add_argument('-u', '--url', metavar='', type=str, nargs=1,
+    help='pass the URL by enclosing the address in quotes')
+parser.add_argument('-s', '--sgm', metavar='', type=str,
+    help='download files 10 to 20 and 60 to 100 --sgm 10-20,60-100')
+parser.add_argument('-p', '--path', metavar='', type=str, nargs=1, 
+    help='current directory or --path "/your/directory"')
+parser.add_argument('-n', '--name-video', metavar='', type=str, nargs=1, 
+    help='destination video file name"')
+args = parser.parse_args()
+
+if args.url is None:
+    exit()
+
+# Url parsing
+pars_ts = re.compile(r'(.+ts).{0,1}')
+pars_num = re.compile(r'{([0-9]+)}')
+
+try:
+    num = int(pars_num.search(args.url[0]).group(1))
+    url = re.sub(pars_num, '{0}', args.url[0])
+except IndexError:
+    print('URL is incorrect.')
+    exit()
+except AttributeError:
+    print('Mark not found, see help for details "-h".')
+    exit()
+
+def shell(command):
+    """Executing shell commands"""
+    return run(command,
+               shell=True,
+               check=True,
+               stdout=PIPE,
+               encoding='utf-8'
+               ).stdout.rstrip()
+
+# Dir
+if args.path is None:
+    dir_download = os.getcwd()
+else:
+    dir_download = args.path[0]
+
+dir_medialoader = f'{dir_download}/medialoader-raw'
+file_output = time.strftime('%d.%m.%y-%H:%M')
+dir_ts = f'{dir_medialoader}/ts/{file_output}'
+file_ffmpeg = f'{dir_ts}/ffmpeg.txt'
+
+try:
+    os.makedirs(dir_ts)
+except FileExistsError:
+    pass
+except PermissionError:
+    print('No directory permissions.')
+    exit()
+else:
+    print('Directory created:',f'{dir_medialoader}')
+
+# wget/ffmpeg parameters
+select_sgm = None
+robotoff='-e robots=off'
+agent = '"Mozilla/5.0 (X11; CrOS x86_64 10066.0.0) ' \
+        'AppleWebKit/537.36 (KHTML, like Gecko) ' \
+        'Chrome/96.0.4664.93 Safari/537.36"'
+
+if args.sgm is not None:
+    try:
+        first_num = [int(i.split('-')[0]) for i in args.sgm.split(',')]
+        end_num = [int(i.split('-')[1]) + 1 for i in args.sgm.split(',')]
+    except(IndexError, ValueError):
+        print('Invalid segment number.')
+        exit()
+
+    num = first_num[0]
+
+# Loading wget
+while True:
+    try:
+        if num == end_num[0]:
+            del first_num[0]
+            del end_num[0]
+
+            try:
+                num = first_num[0]
+            except IndexError:
+                break
+    except NameError:
+        pass
+
+    url_upload = url.format(num)
+    url_segment = url_upload.rsplit('/', 1)
+
+    try:
+        file_ts = pars_ts.search(url_segment[1]).group(1)
+        shell(f'wget -O {dir_ts}/{file_ts} -U {agent} "{url_upload}" {robotoff}')
+    except CalledProcessError:
+        print('URL not found.')
+        break
+    except IndexError:
+        print('Segment not found.')
+        exit()
+
+    with open(file_ffmpeg, 'a') as f:
+        f.write(f'file {file_ts}\n')
+
+        num += 1
+
+# file processing ffmpeg
+ffmpeg_options = '-f concat -safe 0 -i'
+
+if args.name_video is not None:
+    file_output = args.name_video[0]
+
+if exists(file_ffmpeg):
+    shell(f'ffmpeg {ffmpeg_options} {file_ffmpeg} '
+          f'-c copy {dir_medialoader}/"{file_output}".mp4')
+    print(f'File created {dir_medialoader}/{file_output}.mp4')
+else:
+    print('Conference file is empty, processing stopped.')
+    exit()
