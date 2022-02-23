@@ -22,7 +22,7 @@ description='''Download video by URL. Requires: ffmpeg, wget,
     starting the video, determine which part of the URL is changing, enclose 
     it in brackets {}, for example: "http://load9.ts" Pass the URL to 
     the script --url "http//load{9}.ts""''')
-parser.add_argument('-v', '-version', action='version', version='''%(prog)s 0.3 
+parser.add_argument('-v', '-version', action='version', version='''%(prog)s 0.4 
     Project page https://github.com/Koi-foo/medialoader''')
 parser.add_argument('-u', '--url', metavar='', type=str, nargs=1,
     help='pass the URL by enclosing the address in quotes')
@@ -38,7 +38,6 @@ if args.url is None:
     exit()
 
 # Url parsing
-pars_ts = re.compile(r'(.+ts).{0,1}')
 pars_num = re.compile(r'{([0-9]+)}')
 
 try:
@@ -113,10 +112,9 @@ while True:
         pass
 
     url_upload = url.format(num)
-    url_segment = url_upload.rsplit('/', 1)
 
     try:
-        file_ts = pars_ts.search(url_segment[1]).group(1)
+        file_ts = f'segment_{num}'
         shell(f'wget -O {dir_ts}/{file_ts} -U {agent} "{url_upload}" {robotoff}')
     except CalledProcessError:
         print('URL not found.')
